@@ -1,0 +1,141 @@
+//@version=5
+indicator("Google Trends Analysis", shorttitle="GT Analysis", overlay=false)
+
+// ====================
+// INPUT SETTINGS
+// ====================
+enable_bitcoin = input.bool(true, "Show Bitcoin Trends", group="Data Series")
+enable_recession = input.bool(true, "Show Recession Trends", group="Data Series")
+enable_inflation = input.bool(false, "Show Inflation Trends", group="Data Series")
+enable_crypto = input.bool(false, "Show Cryptocurrency Trends", group="Data Series")
+enable_stockmarket = input.bool(false, "Show Stock Market Trends", group="Data Series")
+
+smoothing_length = input.int(5, "Smoothing Length", minval=1, maxval=50, group="Smoothing")
+enable_smoothing = input.bool(false, "Enable Smoothing", group="Smoothing")
+
+// Visual settings
+bitcoin_color = input.color(color.orange, "Bitcoin Color", group="Colors")
+recession_color = input.color(color.red, "Recession Color", group="Colors")
+inflation_color = input.color(color.yellow, "Inflation Color", group="Colors")
+crypto_color = input.color(color.purple, "Cryptocurrency Color", group="Colors")
+stockmarket_color = input.color(color.blue, "Stock Market Color", group="Colors")
+
+show_signals = input.bool(true, "Show Trend Signals", group="Signals")
+signal_threshold = input.float(70.0, "Signal Threshold", minval=50.0, maxval=100.0, group="Signals")
+
+// ====================
+// DATA IMPORT
+// ====================
+// Replace "YOUR_GITHUB_USERNAME" with your actual GitHub username
+github_username = "YOUR_GITHUB_USERNAME"
+
+// Import Google Trends data using Pine Seeds
+bitcoin_raw = enable_bitcoin ? request.seed(github_username, "GOOGL_TRENDS_BITCOIN", "close") : na
+recession_raw = enable_recession ? request.seed(github_username, "GOOGL_TRENDS_RECESSION", "close") : na
+inflation_raw = enable_inflation ? request.seed(github_username, "GOOGL_TRENDS_INFLATION", "close") : na
+crypto_raw = enable_crypto ? request.seed(github_username, "GOOGL_TRENDS_CRYPTOCURRENCY", "close") : na
+stockmarket_raw = enable_stockmarket ? request.seed(github_username, "GOOGL_TRENDS_STOCK_MARKET", "close") : na
+
+// ====================
+// DATA PROCESSING
+// ====================
+// Apply smoothing if enabled
+bitcoin_data = enable_smoothing and not na(bitcoin_raw) ? ta.sma(bitcoin_raw, smoothing_length) : bitcoin_raw
+recession_data = enable_smoothing and not na(recession_raw) ? ta.sma(recession_raw, smoothing_length) : recession_raw
+inflation_data = enable_smoothing and not na(inflation_raw) ? ta.sma(inflation_raw, smoothing_length) : inflation_raw
+crypto_data = enable_smoothing and not na(crypto_raw) ? ta.sma(crypto_raw, smoothing_length) : crypto_raw
+stockmarket_data = enable_smoothing and not na(stockmarket_raw) ? ta.sma(stockmarket_raw, smoothing_length) : stockmarket_raw
+
+// ====================
+// PLOTTING
+// ====================
+// Plot trend lines
+bitcoin_plot = plot(bitcoin_data, title="Bitcoin Trends", color=bitcoin_color, linewidth=2)
+recession_plot = plot(recession_data, title="Recession Trends", color=recession_color, linewidth=2)
+inflation_plot = plot(inflation_data, title="Inflation Trends", color=inflation_color, linewidth=2)
+crypto_plot = plot(crypto_data, title="Cryptocurrency Trends", color=crypto_color, linewidth=2)
+stockmarket_plot = plot(stockmarket_data, title="Stock Market Trends", color=stockmarket_color, linewidth=2)
+
+// Add horizontal reference lines
+hline(50, "Neutral Line", color=color.gray, linestyle=hline.style_dashed)
+hline(75, "High Interest", color=color.red, linestyle=hline.style_dotted)
+hline(25, "Low Interest", color=color.green, linestyle=hline.style_dotted)
+
+// ====================
+// SIGNAL GENERATION
+// ====================
+// Generate signals when trends cross threshold
+bitcoin_signal = show_signals and enable_bitcoin and ta.crossover(bitcoin_data, signal_threshold)
+recession_signal = show_signals and enable_recession and ta.crossover(recession_data, signal_threshold)
+inflation_signal = show_signals and enable_inflation and ta.crossover(inflation_data, signal_threshold)
+
+// Plot signals
+plotshape(bitcoin_signal, title="Bitcoin Signal", style=shape.triangleup, location=location.bottom, color=bitcoin_color, size=size.small)
+plotshape(recession_signal, title="Recession Signal", style=shape.triangleup, location=location.bottom, color=recession_color, size=size.small)
+plotshape(inflation_signal, title="Inflation Signal", style=shape.triangleup, location=location.bottom, color=inflation_color, size=size.small)
+
+// ====================
+// ALERTS
+// ====================
+// Alert conditions
+alertcondition(bitcoin_signal, title="Bitcoin High Interest", message="Bitcoin search interest crossed above {{plot('signal_threshold')}}")
+alertcondition(recession_signal, title="Recession High Interest", message="Recession search interest crossed above {{plot('signal_threshold')}}")
+alertcondition(inflation_signal, title="Inflation High Interest", message="Inflation search interest crossed above {{plot('signal_threshold')}}")
+
+// ====================
+// TABLE DISPLAY
+// ====================
+if barstate.islast
+    // Create info table
+    var table info_table = table.new(position.top_right, 3, 6, bgcolor=color.white, border_width=1)
+    
+    // Headers
+    table.cell(info_table, 0, 0, "Trend", text_color=color.black, bgcolor=color.gray)
+    table.cell(info_table, 1, 0, "Current", text_color=color.black, bgcolor=color.gray)
+    table.cell(info_table, 2, 0, "Status", text_color=color.black, bgcolor=color.gray)
+    
+    // Bitcoin row
+    if enable_bitcoin and not na(bitcoin_data)
+        table.cell(info_table, 0, 1, "Bitcoin", text_color=color.black)
+        table.cell(info_table, 1, 1, str.tostring(bitcoin_data, "#.0"), text_color=color.black)
+        btc_status = bitcoin_data > signal_threshold ? "HIGH" : bitcoin_data > 50 ? "MEDIUM" : "LOW"
+        btc_color = bitcoin_data > signal_threshold ? color.red : bitcoin_data > 50 ? color.yellow : color.green
+        table.cell(info_table, 2, 1, btc_status, text_color=color.white, bgcolor=btc_color)
+    
+    // Recession row
+    if enable_recession and not na(recession_data)
+        table.cell(info_table, 0, 2, "Recession", text_color=color.black)
+        table.cell(info_table, 1, 2, str.tostring(recession_data, "#.0"), text_color=color.black)
+        rec_status = recession_data > signal_threshold ? "HIGH" : recession_data > 50 ? "MEDIUM" : "LOW"
+        rec_color = recession_data > signal_threshold ? color.red : recession_data > 50 ? color.yellow : color.green
+        table.cell(info_table, 2, 2, rec_status, text_color=color.white, bgcolor=rec_color)
+    
+    // Inflation row
+    if enable_inflation and not na(inflation_data)
+        table.cell(info_table, 0, 3, "Inflation", text_color=color.black)
+        table.cell(info_table, 1, 3, str.tostring(inflation_data, "#.0"), text_color=color.black)
+        inf_status = inflation_data > signal_threshold ? "HIGH" : inflation_data > 50 ? "MEDIUM" : "LOW"
+        inf_color = inflation_data > signal_threshold ? color.red : inflation_data > 50 ? color.yellow : color.green
+        table.cell(info_table, 2, 3, inf_status, text_color=color.white, bgcolor=inf_color)
+
+// ====================
+// COMMENTS AND NOTES
+// ====================
+// This indicator displays Google Trends data for various financial and economic terms.
+// The data represents search interest over time, with values from 0-100.
+// 
+// Key Features:
+// - Multiple trend series (Bitcoin, Recession, Inflation, etc.)
+// - Configurable smoothing and colors
+// - Signal generation when trends cross thresholds
+// - Real-time alerts
+// - Summary table with current status
+//
+// Usage:
+// 1. Replace "YOUR_GITHUB_USERNAME" with your actual GitHub username
+// 2. Enable/disable trend series as needed
+// 3. Adjust colors and settings to your preference
+// 4. Set up alerts for important trend changes
+//
+// Data Source: Google Trends via Pine Seeds
+// Update Frequency: Daily (as per Pine Seeds limitations) 

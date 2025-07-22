@@ -1,0 +1,96 @@
+name: Update Google Trends Data
+
+on:
+  schedule:
+    # Run daily at 10:00 UTC (avoid peak times)
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+  push:
+    branches: [ main ]
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/**'
+
+jobs:
+  update-trends-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytrends pandas requests
+    
+    - name: Fetch Google Trends data
+      run: |
+        python scripts/fetch_trends.py
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+    
+    - name: Validate data
+      run: |
+        python scripts/validate_data.py
+    
+    - name: Check for changes
+      id: changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data/
+        if git diff --staged --quiet; then
+          echo "changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "changes=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Commit and push changes
+      if: steps.changes.outputs.changes == 'true'
+      run: |
+        git commit -m "Update Google Trends data - $(date '+%Y-%m-%d %H:%M:%S')"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create summary
+      if: always()
+      run: |
+        echo "## Google Trends Data Update Summary" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Changes detected:** ${{ steps.changes.outputs.changes || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Data Files" >> $GITHUB_STEP_SUMMARY
+        for file in data/*.csv; do
+          if [ -f "$file" ]; then
+            lines=$(wc -l < "$file")
+            echo "- $(basename "$file"): $((lines-1)) data points" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Usage in TradingView" >> $GITHUB_STEP_SUMMARY
+        echo "Use \`request.seed(\"${{ github.repository_owner }}\", \"SYMBOL_NAME\", \"close\")\` in Pine Script" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "❌ Google Trends data update failed!"
+        echo "Please check the workflow logs for details." 

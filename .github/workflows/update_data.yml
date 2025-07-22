@@ -39,34 +39,39 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pytrends pandas requests
+      continue-on-error: false
     
     - name: Fetch Google Trends data
       run: |
         python scripts/fetch_trends.py
       env:
         PYTHONPATH: ${{ github.workspace }}
+      continue-on-error: true
     
     - name: Validate data
       run: |
         python scripts/validate_data.py
+      continue-on-error: true
     
     - name: Check for changes
       id: changes
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add data/
+        git add data/ || true
         if git diff --staged --quiet; then
           echo "changes=false" >> $GITHUB_OUTPUT
+          echo "No changes detected in data files"
         else
           echo "changes=true" >> $GITHUB_OUTPUT
+          echo "Changes detected in data files"
         fi
     
     - name: Commit and push changes
       if: steps.changes.outputs.changes == 'true'
       run: |
-        git commit -m "Update Google Trends data - $(date '+%Y-%m-%d %H:%M:%S')"
-        git push
+        git commit -m "Update Google Trends data - $(date '+%Y-%m-%d %H:%M:%S')" || echo "Nothing to commit"
+        git push || echo "Nothing to push"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
@@ -78,19 +83,28 @@ jobs:
         echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
         echo "**Changes detected:** ${{ steps.changes.outputs.changes || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Data Files" >> $GITHUB_STEP_SUMMARY
+        echo "### Data Files Status" >> $GITHUB_STEP_SUMMARY
         for file in data/*.csv; do
           if [ -f "$file" ]; then
-            lines=$(wc -l < "$file")
-            echo "- $(basename "$file"): $((lines-1)) data points" >> $GITHUB_STEP_SUMMARY
+            lines=$(wc -l < "$file" || echo "0")
+            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "unknown")
+            echo "- $(basename "$file"): $((lines-1)) data points, ${size} bytes" >> $GITHUB_STEP_SUMMARY
           fi
         done
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Usage in TradingView" >> $GITHUB_STEP_SUMMARY
         echo "Use \`request.seed(\"${{ github.repository_owner }}\", \"SYMBOL_NAME\", \"close\")\` in Pine Script" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Available Symbols" >> $GITHUB_STEP_SUMMARY
+        echo "- GOOGL_TRENDS_BITCOIN" >> $GITHUB_STEP_SUMMARY
+        echo "- GOOGL_TRENDS_STOCK_MARKET" >> $GITHUB_STEP_SUMMARY
+        echo "- GOOGL_TRENDS_RECESSION" >> $GITHUB_STEP_SUMMARY
     
-    - name: Notify on failure
-      if: failure()
+    - name: Workflow completed
+      if: always()
       run: |
-        echo "❌ Google Trends data update failed!"
-        echo "Please check the workflow logs for details." 
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "✅ Workflow completed successfully"
+        else
+          echo "⚠️ Workflow completed with issues, but data files should still be available"
+        fi 

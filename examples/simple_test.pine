@@ -1,0 +1,35 @@
+//@version=5
+indicator("Google Trends Test", shorttitle="GT Test", overlay=false)
+
+// Test Pine Seeds connection
+bitcoin_raw = request.seed("lietolieto", "GOOGL_TRENDS_BITCOIN", close)
+recession_raw = request.seed("lietolieto", "GOOGL_TRENDS_RECESSION", close)
+
+// Convert to float explicitly
+bitcoin_trends = ta.valuewhen(not na(bitcoin_raw), bitcoin_raw, 0)
+recession_trends = ta.valuewhen(not na(recession_raw), recession_raw, 0)
+
+// Debug information
+var table debug_table = table.new(position.top_right, 2, 4, bgcolor=color.white, border_width=1)
+
+if barstate.islast
+    table.cell(debug_table, 0, 0, "Data", text_color=color.black, bgcolor=color.gray)
+    table.cell(debug_table, 1, 0, "Value", text_color=color.black, bgcolor=color.gray)
+    
+    table.cell(debug_table, 0, 1, "Bitcoin Raw", text_color=color.black)
+    table.cell(debug_table, 1, 1, str.tostring(bitcoin_raw), text_color=color.black)
+    
+    table.cell(debug_table, 0, 2, "Bitcoin Float", text_color=color.black)
+    table.cell(debug_table, 1, 2, str.tostring(bitcoin_trends), text_color=color.black)
+    
+    table.cell(debug_table, 0, 3, "Type Check", text_color=color.black)
+    table.cell(debug_table, 1, 3, na(bitcoin_raw) ? "NA" : "OK", text_color=color.black)
+
+// Plot only if data is available
+plot(na(bitcoin_trends) ? na : bitcoin_trends, title="Bitcoin Trends", color=color.orange, linewidth=2)
+plot(na(recession_trends) ? na : recession_trends, title="Recession Trends", color=color.red, linewidth=2)
+
+// Reference lines
+hline(50, "Neutral", color=color.gray, linestyle=hline.style_dashed)
+hline(75, "High", color=color.red, linestyle=hline.style_dotted)
+hline(25, "Low", color=color.green, linestyle=hline.style_dotted) 
